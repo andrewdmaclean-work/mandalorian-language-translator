@@ -1,14 +1,13 @@
-const LANGUAGE_NAME = 'Mandalorian';
 const COMMAND_PREFIX = 'mando';
 const MAX_INPUT_LENGTH = 500;
 
 const OPT_OUT_NOTICE = '\n\nReply STOP to opt out, HELP for info.';
 
 const INTRO_MESSAGE =
-  `Welcome to the ${LANGUAGE_NAME} Translator! ` +
-  `Translate any English phrase into the ${LANGUAGE_NAME} language from Star Wars.\n\n` +
-  `Text "Mando" followed by your phrase to translate it.\n` +
-  `Example: Mando hello there` +
+  `Welcome to the Twilio Mando'a Translator! ` +
+  `Translate any English phrase into the Mando'a language from Star Wars.\n\n` +
+  `Text MANDO followed by your phrase to translate it.\n` +
+  `Example: MANDO Hello World` +
   OPT_OUT_NOTICE;
 
 // Load dictionary and translator once at cold start
@@ -26,8 +25,20 @@ function init() {
   phraseLookup = buildPhraseLookup(dict);
 }
 
-exports.handler = function (context, event, callback) {
+exports.handler = async function (context, event, callback) {
   const twiml = new Twilio.twiml.MessagingResponse();
+
+  // Lookup: validate number and reject landlines/voicemail/pagers
+  try {
+    const client = context.getTwilioClient();
+    const result = await client.lookups.v2.phoneNumbers(event.From).fetch({ fields: 'line_type_intelligence' });
+    const lineType = result.lineTypeIntelligence?.type;
+    if (['landline', 'voicemail', 'pager'].includes(lineType)) {
+      return callback(null, twiml);
+    }
+  } catch (err) {
+    console.error('Lookup failed:', err.message);
+  }
 
   const inboundBody = (event.Body || '').trim();
   const command = inboundBody.toUpperCase();
@@ -35,8 +46,8 @@ exports.handler = function (context, event, callback) {
   // Handle HELP keyword
   if (command === 'HELP') {
     twiml.message(
-      `${LANGUAGE_NAME} Translator: Text "Mando" followed by an English ` +
-        `phrase to get it translated into ${LANGUAGE_NAME}. ` +
+      `Twilio Mando'a Translator: Text MANDO followed by an English ` +
+        `phrase to get it translated into Mando'a. ` +
         'Powered by Twilio. Translation made possible by the MandoCreator dictionary (mandocreator.com). ' +
         'Msg & data rates may apply. Reply STOP to opt out.'
     );
@@ -52,7 +63,7 @@ exports.handler = function (context, event, callback) {
     }
   }
 
-  // Check for "Mando" prefix
+  // Check for MANDO prefix
   const lower = inboundBody.toLowerCase();
   if (!lower.startsWith(COMMAND_PREFIX)) {
     const intro = twiml.message();
@@ -61,14 +72,14 @@ exports.handler = function (context, event, callback) {
     return callback(null, twiml);
   }
 
-  // Strip "Mando" prefix and get the phrase to translate
-  const textToTranslate = inboundBody.slice(COMMAND_PREFIX.length).trim();
+  // Strip MANDO prefix and get the phrase to translate
+  const textToTranslate = inboundBody.slice(COMMAND_PREFIX.length).trim().replace(/[^\x20-\x7E]/g, '');
 
-  // "Mando" with no phrase
+  // MANDO with no phrase
   if (!textToTranslate) {
     twiml.message(
-      `What would you like to translate? Text "Mando" followed by a phrase.\n` +
-        `Example: Mando hello there` +
+      `What would you like to translate? Text MANDO followed by a phrase.\n` +
+        `Example: MANDO Hello World` +
         OPT_OUT_NOTICE
     );
     return callback(null, twiml);
@@ -96,11 +107,9 @@ exports.handler = function (context, event, callback) {
     const message = twiml.message();
     message.body(
       `You said\n"${textToTranslate}"\n\n` +
-        `but a Mandalorian would say\n"${translated}"\n\n` +
-        `May the 4th be with you.` +
+        `but in Mando'a you would say\n"${translated}"` +
         OPT_OUT_NOTICE
     );
-    message.media(`https://${context.DOMAIN_NAME}/mando-banner.png`);
     return callback(null, twiml);
   } catch (err) {
     console.error('Translation failed:', err.message);
